@@ -1,0 +1,125 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+#
+
+from numpy import load, int64,max,mean,sort
+from os import listdir
+import pylab
+from rbf import rbf
+
+from sys import path,argv,exit
+
+#LOCAL_LIB_PATH="/home/sergiosilva/Documents/ualg/clusterlib/trunk"
+#path.append(LOCAL_LIB_PATH)
+
+from utils import rms
+
+
+MRT_minV=10.0
+MRT_maxV=35.0
+
+
+def unscale(x,m,M):
+  return x*(M-m)+m
+
+# do not edit! added by PythonBreakpoints
+from pdb import set_trace as _breakpoint
+
+realdata_validations = load('data/Data_Final_heating_random_mrt.npz')['Data_validation']
+realdata_testing = load('data/Data_Final_heating_random_mrt.npz')['Data_test']
+realdata_training = load('data/Data_Final_heating_random_mrt.npz')['Data_train']
+
+pylab.ion()
+pylab.figure(figsize=(12,8))
+pylab.show()
+
+f=open('allmodels_mrt.csv','w')
+f.write("Model_number\tMin_Scale_V\tMax_Scale_V\tMean_Scale_V\tRMS_Scale_V\tMin\tMax\tMean\tRMS\tMin_Scale_tt\tMax_Scale_tt\tMean_Scale_tt\tRMS_Scale_tt\tMin_Scale_tr\tMax_Scale_tr\tMean_Scale_tr\tRMS_Scale_tr\n")
+
+for x in listdir('allmodels_mrt/'):
+    try:
+        if not x.split('.')[-1] == 'npz':
+            print "Only npz files allowed"
+            exit(-1)
+    except:
+        print "Only npz files allowed"
+        exit(-1)
+
+    print x
+
+    modelnumber = x.split('/')[-1].split('.')[0]
+
+    x = load("allmodels_mrt/"+ modelnumber + ".npz")
+
+    neurons = x['spreads'].shape[0]
+
+    MRT_INPUT_LAGS = int64(sort(x['features']))
+
+    MRTmodel = rbf(None,None,neurons=neurons,bias=True,afun='gauss',iC='random')
+
+    MRTmodel.C = x['centers']
+    MRTmodel.S = x['spreads'].flatten()
+    MRTmodel.W = (x['weights'].flatten(),0)
+    
+    Yvalidation = MRTmodel.ProduceOutput(realdata_validations[:, MRT_INPUT_LAGS])
+    Ytesting = MRTmodel.ProduceOutput(realdata_testing[:, MRT_INPUT_LAGS])
+    Ytraining = MRTmodel.ProduceOutput(realdata_training[:, MRT_INPUT_LAGS])
+
+    vEscalevalidation = realdata_validations[:,0]-Yvalidation
+    vEscaletesting = realdata_testing[:,0]-Ytesting
+    vEscaletraining = realdata_training[:,0]-Ytraining
+
+    vE = unscale(realdata_validations[:,0],MRT_minV,MRT_maxV) - unscale(Yvalidation,MRT_minV,MRT_maxV)
+    
+    dados = []
+
+    dados.insert(len(dados),min(vEscalevalidation))
+    dados.insert(len(dados),max(vEscalevalidation))
+    dados.insert(len(dados),mean(vEscalevalidation))
+    dados.insert(len(dados),rms(vEscalevalidation))
+
+    dados.insert(len(dados),min(vE))
+    dados.insert(len(dados),max(vE))
+    dados.insert(len(dados),mean(vE))
+    dados.insert(len(dados),rms(vE))
+
+    dados.insert(len(dados),min(vEscaletesting))
+    dados.insert(len(dados),max(vEscaletesting))
+    dados.insert(len(dados),mean(vEscaletesting))
+    dados.insert(len(dados),rms(vEscaletesting))
+
+    dados.insert(len(dados),min(vEscaletraining))
+    dados.insert(len(dados),max(vEscaletraining))
+    dados.insert(len(dados),mean(vEscaletraining))
+    dados.insert(len(dados),rms(vEscaletraining))
+
+    # print "max of error unscale ", max(vE)
+    # print "min of error unscale", min(vE)
+    # print "mean of error unscale", mean(vE)
+
+    # print "root mean square unscale", rms(vE)
+
+    # print "max of error scale", max(vEscale)
+    # print "min of error scale", min(vEscale)
+    # print "mean of error scale", mean(vEscale)
+
+    # print "root mean square scale", rms(vEscale)
+    tmpwrite = "".join("\t" + "%s" % str(x).replace('.',',') for x in dados)
+    
+    f.write("""%s%s\n""" % (modelnumber,tmpwrite))
+
+    pylab.clf()
+
+    pylab.title('Target Validation Data and Model Output Data')
+    real_legend = pylab.plot(unscale(realdata_validations[:,0],MRT_minV,MRT_maxV),label='Real')
+    model_legend = pylab.plot(unscale(Yvalidation,MRT_minV,MRT_maxV),label='Model Output')
+    pylab.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=6,ncol=2, mode="expand", borderaxespad=0.)
+
+    pylab.ylabel('Mean Rediant Temperature')
+    pylab.xlabel('Number of points')
+    ax = pylab.draw()
+    pylab.savefig("allmodels_mrt_image/%s.png" % modelnumber)
+f.close()
+    #print vE
+
+
